@@ -59,11 +59,6 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
 
 	int32_t width, height;
 	wlr_output_effective_resolution(wlr_output, &width, &height);
-
-	wlr_output_attach_render(wlr_output, NULL);
-	wlr_renderer_begin(sample->renderer, wlr_output->width, wlr_output->height);
-	wlr_renderer_clear(sample->renderer, (float[]){0.25f, 0.25f, 0.25f, 1});
-
     cairo_format_t cFormat = CAIRO_FORMAT_ARGB32;
 
     cairo_surface_t *cSurface =
@@ -82,12 +77,19 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
     printf("CAIRO STATUS: %s\n", cairo_status_to_string(cairo_surface_status(cSurface)));
 
     /* After calling this every kind of wlr_render_... will fail with the same error*/
-    // struct wlr_texture *cTexture = wlr_texture_from_pixels(sample->renderer, WL_SHM_FORMAT_ARGB8888, stride, width, height, cData);
+    struct wlr_texture *cTexture = wlr_texture_from_pixels(sample->renderer, WL_SHM_FORMAT_ARGB8888, stride, width, height, cData);
+
+	wlr_output_attach_render(wlr_output, NULL);
+	wlr_renderer_begin(sample->renderer, wlr_output->width, wlr_output->height);
+	wlr_renderer_clear(sample->renderer, (float[]){0.25f, 0.25f, 0.25f, 1});
+	cairo_destroy(cr);
+	cairo_surface_destroy(cSurface);
+
     float color[] = {0.0f, 0.0f, 0.0f, 0.1f};
 
 	for (int y = -128 + (int)sample_output->y_offs; y < height; y += 128) {
 		for (int x = -128 + (int)sample_output->x_offs; x < width; x += 128) {
-			wlr_render_texture(sample->renderer, sample->cat_texture,
+			wlr_render_texture(sample->renderer, cTexture,
 				wlr_output->transform_matrix, x, y, 1.0f);
 		}
 	}
