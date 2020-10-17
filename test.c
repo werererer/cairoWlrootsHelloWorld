@@ -26,21 +26,12 @@ struct sample_state {
     struct wl_display *display;
     struct wl_listener new_output;
     struct wl_listener new_input;
-    struct timespec last_frame;
-    struct wlr_renderer *renderer;
-    struct wlr_texture *cat_texture;
-    struct wl_list outputs;
-    enum wl_output_transform transform;
-};
-
-struct sample_output {
-    struct sample_state *sample;
-    struct wlr_output *output;
     struct wl_listener frame;
     struct wl_listener destroy;
-    float x_offs, y_offs;
-    float x_vel, y_vel;
     struct wl_list link;
+    struct timespec last_frame;
+    struct wlr_renderer *renderer;
+    enum wl_output_transform transform;
 };
 
 struct sample_keyboard {
@@ -51,11 +42,8 @@ struct sample_keyboard {
 };
 
 static void output_frame_notify(struct wl_listener *listener, void *data) {
-    struct sample_output *sample_output = wl_container_of(listener, sample_output, frame);
-    struct sample_state *sample = sample_output->sample;
-    struct wlr_output *wlr_output = sample_output->output;
-    struct timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
+    struct sample_state *sample = wl_container_of(listener, sample, frame);
+    struct wlr_output *wlr_output = data;
 
     int32_t width, height;
     wlr_output_effective_resolution(wlr_output, &width, &height);
@@ -74,10 +62,10 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
     cairo_surface_flush(cSurface);
     int stride = cairo_format_stride_for_width(cFormat, width);
     unsigned char *cData = cairo_image_surface_get_data(cSurface);
-    printf("CAIRO STATUS: %s\n", cairo_status_to_string(cairo_surface_status(cSurface)));
 
     /* After calling this every kind of wlr_render_... will fail with the same error*/
-    struct wlr_texture *cTexture = wlr_texture_from_pixels(sample->renderer, WL_SHM_FORMAT_ARGB8888, stride, width, height, cData);
+    struct wlr_texture *texture = wlr_texture_from_pixels(
+        sample->renderer, WL_SHM_FORMAT_ARGB8888, stride, width, height, cData);
 
     wlr_output_attach_render(wlr_output, NULL);
     wlr_renderer_begin(sample->renderer, wlr_output->width, wlr_output->height);
@@ -87,66 +75,31 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
 
     float color[] = {0.0f, 0.0f, 0.0f, 0.1f};
 
-    for (int y = -128 + (int)sample_output->y_offs; y < height; y += 128) {
-        for (int x = -128 + (int)sample_output->x_offs; x < width; x += 128) {
-            wlr_render_texture(sample->renderer, cTexture,
-                wlr_output->transform_matrix, x, y, 1.0f);
-        }
-    }
+    wlr_render_texture(sample->renderer, texture,
+            wlr_output->transform_matrix, 0, 0, 1.0f);
 
     wlr_renderer_end(sample->renderer);
     wlr_output_commit(wlr_output);
-
-    long ms = (now.tv_sec - sample->last_frame.tv_sec) * 1000 +
-        (now.tv_nsec - sample->last_frame.tv_nsec) / 1000000;
-    float seconds = ms / 1000.0f;
-
-    sample_output->x_offs += sample_output->x_vel * seconds;
-    sample_output->y_offs += sample_output->y_vel * seconds;
-    if (sample_output->x_offs > 128) {
-        sample_output->x_offs = 0;
-    }
-    if (sample_output->y_offs > 128) {
-        sample_output->y_offs = 0;
-    }
-    sample->last_frame = now;
-}
-
-static void update_velocities(struct sample_state *sample,
-        float x_diff, float y_diff) {
-    struct sample_output *sample_output;
-    wl_list_for_each(sample_output, &sample->outputs, link) {
-        sample_output->x_vel += x_diff;
-        sample_output->y_vel += y_diff;
-    }
 }
 
 static void output_remove_notify(struct wl_listener *listener, void *data) {
-    struct sample_output *sample_output = wl_container_of(listener, sample_output, destroy);
-    wl_list_remove(&sample_output->frame.link);
-    wl_list_remove(&sample_output->destroy.link);
-    free(sample_output);
+    struct sample_state *sample = wl_container_of(listener, sample, destroy);
+    wl_list_remove(&sample->frame.link);
+    wl_list_remove(&sample->destroy.link);
 }
 
 static void new_output_notify(struct wl_listener *listener, void *data) {
     struct wlr_output *output = data;
     struct sample_state *sample = wl_container_of(listener, sample, new_output);
-    struct sample_output *sample_output = calloc(1, sizeof(struct sample_output));
     if (!wl_list_empty(&output->modes)) {
         struct wlr_output_mode *mode = wl_container_of(output->modes.prev, mode, link);
         wlr_output_set_mode(output, mode);
     }
-    sample_output->x_offs = sample_output->y_offs = 0;
-    sample_output->x_vel = sample_output->y_vel = 128;
-
     wlr_output_set_transform(output, sample->transform);
-    sample_output->output = output;
-    sample_output->sample = sample;
-    wl_signal_add(&output->events.frame, &sample_output->frame);
-    sample_output->frame.notify = output_frame_notify;
-    wl_signal_add(&output->events.destroy, &sample_output->destroy);
-    sample_output->destroy.notify = output_remove_notify;
-    wl_list_insert(&sample->outputs, &sample_output->link);
+    wl_signal_add(&output->events.frame, &sample->frame);
+    sample->frame.notify = output_frame_notify;
+    wl_signal_add(&output->events.destroy, &sample->destroy);
+    sample->destroy.notify = output_remove_notify;
 
     wlr_output_commit(output);
 }
@@ -163,22 +116,6 @@ static void keyboard_key_notify(struct wl_listener *listener, void *data) {
         xkb_keysym_t sym = syms[i];
         if (sym == XKB_KEY_Escape) {
             wl_display_terminate(sample->display);
-        }
-        if (event->state == WLR_KEY_PRESSED) {
-            switch (sym) {
-            case XKB_KEY_Left:
-                update_velocities(sample, -16, 0);
-                break;
-            case XKB_KEY_Right:
-                update_velocities(sample, 16, 0);
-                break;
-            case XKB_KEY_Up:
-                update_velocities(sample, 0, -16);
-                break;
-            case XKB_KEY_Down:
-                update_velocities(sample, 0, 16);
-                break;
-            }
         }
     }
 }
@@ -230,40 +167,12 @@ static void new_input_notify(struct wl_listener *listener, void *data) {
 
 
 int main(int argc, char *argv[]) {
-    int c;
-    enum wl_output_transform transform = WL_OUTPUT_TRANSFORM_NORMAL;
-    while ((c = getopt(argc, argv, "r:")) != -1) {
-        switch (c) {
-        case 'r':
-            if (strcmp(optarg, "90") == 0) {
-                transform = WL_OUTPUT_TRANSFORM_90;
-            } else if (strcmp(optarg, "180") == 0) {
-                transform = WL_OUTPUT_TRANSFORM_180;
-            } else if (strcmp(optarg, "270") == 0) {
-                transform = WL_OUTPUT_TRANSFORM_270;
-            } else if (strcmp(optarg, "flipped") == 0) {
-                transform = WL_OUTPUT_TRANSFORM_FLIPPED;
-            } else if (strcmp(optarg, "flipped-90") == 0) {
-                transform = WL_OUTPUT_TRANSFORM_FLIPPED_90;
-            } else if (strcmp(optarg, "flipped-180") == 0) {
-                transform = WL_OUTPUT_TRANSFORM_FLIPPED_180;
-            } else if (strcmp(optarg, "flipped-270") == 0) {
-                transform = WL_OUTPUT_TRANSFORM_FLIPPED_270;
-            } else {
-                wlr_log(WLR_ERROR, "got unknown transform value: %s", optarg);
-            }
-            break;
-        default:
-            break;
-        }
-    }
     wlr_log_init(WLR_DEBUG, NULL);
     struct wl_display *display = wl_display_create();
     struct sample_state state = {
         .display = display,
-        .transform = transform
+        .transform = WL_OUTPUT_TRANSFORM_NORMAL,
     };
-    wl_list_init(&state.outputs);
 
     struct wlr_backend *wlr = wlr_backend_autocreate(display, NULL);
     if (!wlr) {
@@ -282,13 +191,6 @@ int main(int argc, char *argv[]) {
         wlr_backend_destroy(wlr);
         exit(EXIT_FAILURE);
     }
-    state.cat_texture = wlr_texture_from_pixels(state.renderer,
-        WL_SHM_FORMAT_ABGR8888, cat_tex.width * 4, cat_tex.width, cat_tex.height,
-        cat_tex.pixel_data);
-    if (!state.cat_texture) {
-        wlr_log(WLR_ERROR, "Could not start compositor, OOM");
-        exit(EXIT_FAILURE);
-    }
 
     if (!wlr_backend_start(wlr)) {
         wlr_log(WLR_ERROR, "Failed to start backend");
@@ -297,6 +199,5 @@ int main(int argc, char *argv[]) {
     }
     wl_display_run(display);
 
-    wlr_texture_destroy(state.cat_texture);
     wl_display_destroy(display);
 }
