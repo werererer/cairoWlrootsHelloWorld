@@ -19,7 +19,6 @@
 #include <wlr/types/wlr_matrix.h>
 #include <wlr/util/log.h>
 #include <xkbcommon/xkbcommon.h>
-#include "cat.h"
 #include <cairo/cairo.h>
 
 struct sample_state {
