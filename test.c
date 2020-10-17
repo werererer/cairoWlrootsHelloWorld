@@ -61,7 +61,7 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
 	wlr_output_effective_resolution(wlr_output, &width, &height);
 
 	wlr_output_attach_render(wlr_output, NULL);
-	wlr_renderer_begin(sample->renderer, 10, 30);
+	wlr_renderer_begin(sample->renderer, wlr_output->width, wlr_output->height);
 	wlr_renderer_clear(sample->renderer, (float[]){0.25f, 0.25f, 0.25f, 1});
 
     cairo_format_t cFormat = CAIRO_FORMAT_ARGB32;
@@ -80,16 +80,10 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
     int stride = cairo_format_stride_for_width(cFormat, width);
     unsigned char *cData = cairo_image_surface_get_data(cSurface);
     printf("CAIRO STATUS: %s\n", cairo_status_to_string(cairo_surface_status(cSurface)));
-    struct wlr_texture *test = sample->cat_texture;
 
-    struct wlr_texture *cTexture = wlr_texture_from_pixels(sample->renderer, WL_SHM_FORMAT_ARGB8888, stride, width, height, cData);
-    wlr_texture_get_size(cTexture, &width, &height);
-    float col[] = {0.0f, 0.0f, 0.0f, 0.1f};
-    wlr_renderer_clear(sample->renderer, col);
-    printf("works\n");
-    if (*cData) {
-        printf("not empty\n");
-    }
+    /* After calling this every kind of wlr_render_... will fail with the same error*/
+    // struct wlr_texture *cTexture = wlr_texture_from_pixels(sample->renderer, WL_SHM_FORMAT_ARGB8888, stride, width, height, cData);
+    float color[] = {0.0f, 0.0f, 0.0f, 0.1f};
 
 	for (int y = -128 + (int)sample_output->y_offs; y < height; y += 128) {
 		for (int x = -128 + (int)sample_output->x_offs; x < width; x += 128) {
