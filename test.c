@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include <time.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
@@ -27,8 +26,6 @@ struct sample_state {
     struct wl_listener new_input;
     struct wl_listener frame;
     struct wl_listener destroy;
-    struct wl_list link;
-    struct timespec last_frame;
     struct wlr_renderer *renderer;
     enum wl_output_transform transform;
 };
@@ -182,7 +179,6 @@ int main(int argc, char *argv[]) {
     state.new_output.notify = new_output_notify;
     wl_signal_add(&wlr->events.new_input, &state.new_input);
     state.new_input.notify = new_input_notify;
-    clock_gettime(CLOCK_MONOTONIC, &state.last_frame);
 
     state.renderer = wlr_backend_get_renderer(wlr);
     if (!state.renderer) {
