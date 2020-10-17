@@ -45,29 +45,33 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
     wlr_output_effective_resolution(wlr_output, &width, &height);
     cairo_format_t cFormat = CAIRO_FORMAT_ARGB32;
 
-    cairo_surface_t *cSurface =
+    cairo_surface_t *surface =
         cairo_image_surface_create(cFormat, width, height);
 
-    cairo_t *cr = cairo_create(cSurface);
+    cairo_t *cr = cairo_create(surface);
     cairo_set_source_rgb(cr, 0.6, 0.6, 0.6);
     cairo_set_line_width(cr, 1);
 
     cairo_rectangle(cr, 0, 0, 100, 100);
     cairo_set_source_rgba(cr, 0.0, 0.0, 1.0, 1.0);
-    cairo_fill(cr);
-    cairo_surface_flush(cSurface);
+    cairo_select_font_face(cr, "serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 32.0);
+    cairo_set_source_rgb(cr, 1.0, 1.4, 1.0);
+    cairo_move_to(cr, 10.0, 50.0);
+    cairo_show_text(cr, "Hello World");
+    cairo_surface_flush(surface);
     int stride = cairo_format_stride_for_width(cFormat, width);
-    unsigned char *cData = cairo_image_surface_get_data(cSurface);
+    unsigned char *cData = cairo_image_surface_get_data(surface);
 
-    /* After calling this every kind of wlr_render_... will fail with the same error*/
     struct wlr_texture *texture = wlr_texture_from_pixels(
         sample->renderer, WL_SHM_FORMAT_ARGB8888, stride, width, height, cData);
-
     wlr_output_attach_render(wlr_output, NULL);
+
     wlr_renderer_begin(sample->renderer, wlr_output->width, wlr_output->height);
     wlr_renderer_clear(sample->renderer, (float[]){0.25f, 0.25f, 0.25f, 1});
+
     cairo_destroy(cr);
-    cairo_surface_destroy(cSurface);
+    cairo_surface_destroy(surface);
 
     float color[] = {0.0f, 0.0f, 0.0f, 0.1f};
 
@@ -76,6 +80,7 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
 
     wlr_renderer_end(sample->renderer);
     wlr_output_commit(wlr_output);
+    wlr_texture_destroy(texture);
 }
 
 static void output_remove_notify(struct wl_listener *listener, void *data) {
