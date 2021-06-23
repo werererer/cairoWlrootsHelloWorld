@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200112L
 #include <GLES2/gl2.h>
 #include <getopt.h>
+#include <libdrm/drm_fourcc.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -64,7 +65,7 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
     unsigned char *cData = cairo_image_surface_get_data(surface);
 
     struct wlr_texture *texture = wlr_texture_from_pixels(
-        sample->renderer, WL_SHM_FORMAT_ARGB8888, stride, width, height, cData);
+        sample->renderer, DRM_FORMAT_ARGB8888, stride, width, height, cData);
     wlr_output_attach_render(wlr_output, NULL);
 
     wlr_renderer_begin(sample->renderer, wlr_output->width, wlr_output->height);
@@ -175,7 +176,7 @@ int main(int argc, char *argv[]) {
         .transform = WL_OUTPUT_TRANSFORM_NORMAL,
     };
 
-    struct wlr_backend *wlr = wlr_backend_autocreate(display, NULL);
+    struct wlr_backend *wlr = wlr_backend_autocreate(display);
     if (!wlr) {
         exit(1);
     }
